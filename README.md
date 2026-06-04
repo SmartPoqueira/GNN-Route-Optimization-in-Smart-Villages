@@ -9,7 +9,11 @@ Predicting whether a tourist will revisit a rural destination is key for sustain
 A multi-objective NAS search over the MPNN architecture space finds Pareto-optimal models that maximize classification performance while minimizing computational cost.
 
 
-![GNN Architecture](images/architecture.png)
+<p align="center">
+  <img src="images/architecture.png" width="750"/>
+</p>
+
+*Pipeline and architecture of the ImprovedMPNN framework with multi-objective NAS.*
 
 ## Method
 
@@ -32,6 +36,12 @@ Pareto front from 200 NAS trials (best configurations):
 | A | 128 | 2+2+1+2 | ✓ | **0.847** | 42.3 |
 | B | 96 | 1+1+2+1 | ✗ | 0.831 | 18.7 |
 | C | 64 | 1+1+1+1 | ✗ | 0.812 | **9.4** |
+
+<p align="center">
+  <img src="images/pareto_front.png" width="700"/>
+</p>
+
+*Multi-objective NAS-HPO executions. Red stars indicate the Pareto front (maximise F1, minimise training time).*
 
 ## Project Structure
 
