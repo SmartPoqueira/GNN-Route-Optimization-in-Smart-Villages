@@ -14,7 +14,7 @@ from optuna.samplers import TPESampler
 from optuna.pruners import HyperbandPruner
 
 import matplotlib
-matplotlib.use('Agg') 
+matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import seaborn as sns
 
@@ -31,15 +31,15 @@ from improvedMPNN_nas import ImprovedMPNN_NAS
 
 class GraphClassifierNAS:
     """
-    Clase que gestiona:
-    1. Carga y preprocesamiento de datos (CSV -> Grafos).
-    2. Creación del dataset (train, val, test).
-    3. NAS multiobjetivo con Optuna (max F1, min tiempo) sobre ImprovedMPNN_NAS.
-    4. Guarda resultados en un .json y muestra el frente de Pareto en consola.
+    Manages the full NAS pipeline:
+    1. Data loading and preprocessing (CSV -> Graphs).
+    2. Dataset creation (train, val, test splits).
+    3. Multi-objective NAS with Optuna (maximize F1, minimize time) over ImprovedMPNN_NAS.
+    4. Saves results to a .json file and prints the Pareto front.
     """
 
     def __init__(self, config_path: str):
-        # Leer archivo YAML
+        # Load YAML config
         with open(config_path, 'r') as f:
             self.config = yaml.safe_load(f)
 
@@ -49,17 +49,17 @@ class GraphClassifierNAS:
         self.csv_path = self.config['csv_path']
         self.df = pd.read_csv(self.csv_path)
 
-        # Parámetros undersampling
+        # Undersampling parameters
         self.undersampling = self.config.get('undersampling', False)
         self.undersampling_ratio = self.config.get('undersampling_ratio', [70, 30])
 
-        # Parámetros de modelado
+        # Modelling parameters
         self.training_params = self.config['training_params']
 
         self.preprocess_labels()
         self.node_mapping = self.create_node_mapping()
-        self.num_node_features = len(self.node_mapping) + 1  # +1 para direction
-        self.num_edge_features = 1  # times
+        self.num_node_features = len(self.node_mapping) + 1  # +1 for direction
+        self.num_edge_features = 1  # travel times
 
         self.graph_objects = self.create_graph_objects()
         self.train_dataset, self.test_dataset, self.validation_dataset = self.split_data()
@@ -67,10 +67,10 @@ class GraphClassifierNAS:
         if self.undersampling:
             self.train_dataset = self.undersample_data(self.train_dataset, self.undersampling_ratio)
 
-        # device
+        # Device
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
-        # Parámetros de NAS
+        # NAS parameters
         self.n_trials = self.training_params.get('n_trials_for_nas', 5)
         self.epochs = self.training_params.get('epochs', 30)
         self.patience = self.training_params.get('patience', 10)
@@ -85,7 +85,7 @@ class GraphClassifierNAS:
         torch.backends.cudnn.benchmark = False
 
     def preprocess_labels(self):
-        """ Preprocesa la columna de etiquetas. """
+        """Preprocesses the label column."""
         self.df['label'] = self.df['repeater'].astype(int)
         class_counts = self.df['label'].value_counts()
         plt.figure()
@@ -98,7 +98,7 @@ class GraphClassifierNAS:
         plt.close()
 
     def create_node_mapping(self):
-        """ Crea un mapeo node->indice. """
+        """Creates a node-to-index mapping."""
         node_set = set()
         for route_str in self.df['route']:
             route = ast.literal_eval(route_str)
@@ -127,7 +127,7 @@ class GraphClassifierNAS:
             edge_index = torch.empty((2,0), dtype=torch.long)
             edge_attr = torch.empty((0,1), dtype=torch.float)
 
-        # Features de nodos
+        # Node features
         num_unique_nodes = len(self.node_mapping)
         node_type_features = torch.zeros((num_nodes, num_unique_nodes), dtype=torch.float)
         direction_features = torch.zeros((num_nodes,1), dtype=torch.float)
@@ -143,7 +143,7 @@ class GraphClassifierNAS:
         return data_g
 
     def create_graph_objects(self):
-        """ Convierte cada fila del DF en un objeto grafo PyG. """
+        """Converts each DataFrame row into a PyG graph object."""
         graphs = []
         for _, row in self.df.iterrows():
             g = self.row_to_graph(row)
@@ -151,39 +151,39 @@ class GraphClassifierNAS:
         return graphs
 
     def split_data(self):
-        """ Divide dataset en train, test, val con proporciones 70%, 15%, 15%. """
-        # Primera división: 85% para entrenamiento + validación, 15% para prueba
+        """Splits dataset into train, test, val with 70/15/15 proportions."""
+        # First split: 85% train+val, 15% test
         train_val_data, test_data = train_test_split(
             self.graph_objects,
-            test_size=0.15,  # Cambiado de 0.2 a 0.15
+            test_size=0.15,
             random_state=self.seed,
             stratify=[g.y.item() for g in self.graph_objects]
         )
-        
-        # Segunda división: aproximadamente 82.35% de train_val para entrenamiento, 17.65% para validación
-        # Esto resulta en 70% entrenamiento y 15% validación del total original
+
+        # Second split: ~82.35% of train_val for train, 17.65% for val
+        # Results in 70% train and 15% val of the original total
         train_data, val_data = train_test_split(
             train_val_data,
-            test_size=0.1765,  # Cambiado de 0.1 a 0.1765
+            test_size=0.1765,
             random_state=self.seed,
             stratify=[g.y.item() for g in train_val_data]
         )
-        
+
         return train_data, test_data, val_data
 
 
     def undersample_data(self, dataset, ratio):
         """
-        Realiza undersampling en 'dataset' asumiendo dos clases.
-        ratio = [majority%, minority%], p. ej. [70, 30].
+        Performs undersampling on 'dataset' assuming two classes.
+        ratio = [majority%, minority%], e.g. [70, 30].
         """
         if len(ratio) != 2:
-            raise ValueError("undersampling_ratio debe ser [majority_percent, minority_percent].")
+            raise ValueError("undersampling_ratio must be [majority_percent, minority_percent].")
         labels = [g.y.item() for g in dataset]
         class_counts = pd.Series(labels).value_counts()
         if len(class_counts) != 2:
-            raise ValueError("Se esperaban exactamente 2 clases para undersampling.")
-        
+            raise ValueError("Expected exactly 2 classes for undersampling.")
+
         majority_class = class_counts.idxmax()
         minority_class = class_counts.idxmin()
         majority_data = [g for g in dataset if g.y.item() == majority_class]
@@ -192,16 +192,16 @@ class GraphClassifierNAS:
         n_minority = len(minority_data)
         desired_majority = int((ratio[0]/ratio[1]) * n_minority)
         if desired_majority > len(majority_data):
-            raise ValueError("La proporción deseada excede las muestras disponibles de la clase mayoritaria.")
+            raise ValueError("Desired ratio exceeds available majority class samples.")
         majority_downsampled = random.sample(majority_data, desired_majority)
         balanced_dataset = majority_downsampled + minority_data
         random.shuffle(balanced_dataset)
-        print(f"[DEBUG] Undersampling: majority={len(majority_data)}-> {desired_majority}, minority={len(minority_data)}.")
+        print(f"[DEBUG] Undersampling: majority={len(majority_data)}->{desired_majority}, minority={len(minority_data)}.")
         return balanced_dataset
 
     def run_multiobjective_experiment(self):
         """
-        Ejecuta la búsqueda multiobjetivo con Optuna y guarda resultados en .json.
+        Runs multi-objective NAS with Optuna and saves results to .json.
         """
         def objective(trial: Trial):
             return self.objective_multi(trial)
@@ -210,7 +210,7 @@ class GraphClassifierNAS:
         pruner = HyperbandPruner(min_resource=1, max_resource=self.epochs)
 
         study = optuna.create_study(
-            directions=["maximize", "minimize"],  # (F1 Score, Tiempo)
+            directions=["maximize", "minimize"],  # (F1 Score, Time)
             sampler=sampler,
             pruner=pruner
         )
@@ -218,9 +218,9 @@ class GraphClassifierNAS:
 
         all_trials = []
         for t in study.trials:
-            # Recuperamos el threshold guardado en user_attrs
+            # Retrieve the threshold stored in user_attrs
             best_threshold_stored = t.user_attrs.get("best_threshold", None)
-            
+
             trial_info = {
                 "number": t.number,
                 "values": t.values,
@@ -233,9 +233,9 @@ class GraphClassifierNAS:
         with open(self.output_json, "w") as f:
             json.dump(all_trials, f, indent=2)
 
-        print("\n=== Pareto Front (mejores) ===")
+        print("\n=== Pareto Front (best trials) ===")
         for bt in study.best_trials:
-            # También tomamos el threshold del best_trial
+            # Retrieve threshold from best_trial user_attrs
             threshold_bt = bt.user_attrs.get("best_threshold", None)
             print(f" Trial #{bt.number}")
             print(f"   F1 Score: {bt.values[0]:.4f}")
@@ -243,12 +243,12 @@ class GraphClassifierNAS:
             print(f"   Params:   {bt.params}")
             print(f"   Best Threshold: {threshold_bt}\n")
 
-        print(f"Archivo '{self.output_json}' guardado con las ejecuciones.")
+        print(f"File '{self.output_json}' saved with all trial results.")
         return study
 
     def objective_multi(self, trial: Trial):
         """
-        Retorna (F1enVal, TiempoEntrenamiento) para la arquitectura generada.
+        Returns (F1_on_val, TrainingTime) for the sampled architecture.
         """
         node_mlp_layers = trial.suggest_int('node_mlp_layers', 1, 3)
         edge_mlp_layers = trial.suggest_int('edge_mlp_layers', 1, 3)
@@ -260,12 +260,12 @@ class GraphClassifierNAS:
         use_batchnorm = trial.suggest_categorical('use_batchnorm', [True, False])
         aggregator = trial.suggest_categorical('aggregator', ['mean','add','max'])
         lr = trial.suggest_float('lr', 1e-4, 1e-2, log=True)
-        
-        # Nuevos hiperparámetros
+
+        # Additional hyperparameters
         use_attention = trial.suggest_categorical('use_attention', [True, False])
         residual_connection = trial.suggest_categorical('residual_connection', [True, False])
-        
-        # **Nuevo Hiperparámetro: Uso de Undersampling**
+
+        # Undersampling as a hyperparameter
         use_undersampling = trial.suggest_categorical('use_undersampling', [True, False])
 
         model_params = {
@@ -287,15 +287,14 @@ class GraphClassifierNAS:
             model_params=model_params
         ).to(self.device)
 
-        # **Aplicar Undersampling si está habilitado**
+        # Apply undersampling if enabled
         if use_undersampling:
-            # Aplicar undersampling con la proporción fija [70, 30]
             train_dataset = self.undersample_data(self.train_dataset, [70, 30])
-            print("[INFO] Undersampling aplicado al conjunto de entrenamiento.")
+            print("[INFO] Undersampling applied to training set.")
         else:
             train_dataset = self.train_dataset
 
-        # Crear DataLoaders con el dataset balanceado o original
+        # Create DataLoaders with balanced or original dataset
         g = torch.Generator()
         g.manual_seed(self.seed)
         train_loader = DataLoader(
@@ -320,25 +319,25 @@ class GraphClassifierNAS:
         end_time = time.time()
         train_time = end_time - start_time
 
-        # Guardamos el threshold como atributo del trial
+        # Store threshold as a trial attribute
         trial.set_user_attr("best_threshold", float(best_threshold))
-        
+
         return (best_val_f1, train_time)
 
 
 
     def train_and_evaluate_for_trial(self, model, optimizer, criterion, train_loader, val_loader):
         """
-        Entrena y evalúa el modelo por 'self.epochs' épocas.
-        Muestra Train Loss, Validation Loss, y el Best Threshold.
-        Retorna (best_val_f1, best_threshold_en_val).
+        Trains and evaluates the model for 'self.epochs' epochs.
+        Logs Train Loss, Validation Loss, and Best Threshold per epoch.
+        Returns (best_val_f1, best_threshold_on_val).
         """
         best_val_f1 = 0.0
         best_threshold_overall = 0.5
         trigger_times = 0
 
         for epoch in range(self.epochs):
-            # ----- FASE DE ENTRENAMIENTO -----
+            # ----- TRAINING PHASE -----
             model.train()
             total_loss = 0.0
             for data in train_loader:
@@ -351,7 +350,7 @@ class GraphClassifierNAS:
                 total_loss += loss.item()
             avg_train_loss = total_loss / len(train_loader)
 
-            # ----- FASE DE VALIDACIÓN: calculamos val_loss -----
+            # ----- VALIDATION PHASE -----
             model.eval()
             val_loss = 0.0
             with torch.no_grad():
@@ -362,16 +361,16 @@ class GraphClassifierNAS:
                     val_loss += val_loss_batch.item()
             avg_val_loss = val_loss / len(val_loader)
 
-            # ----- HALLAR EL UMBRAL QUE MAXIMIZA F1 EN VALIDACIÓN -----
+            # ----- FIND THRESHOLD THAT MAXIMISES F1 ON VALIDATION -----
             threshold_this_epoch, val_f1 = self.evaluate_best_threshold_and_f1(model, val_loader)
 
-            # ----- IMPRIMIR LOS RESULTADOS DE ESTA ÉPOCA -----
+            # ----- LOG EPOCH RESULTS -----
             print(f"Epoch {epoch+1}, "
                   f"Train Loss: {avg_train_loss:.4f}, "
                   f"Validation Loss: {avg_val_loss:.4f}, "
                   f"Best Threshold: {threshold_this_epoch:.4f}")
 
-            # ----- EARLY STOPPING SEGÚN F1 (OPCIONAL) -----
+            # ----- EARLY STOPPING ON F1 -----
             if val_f1 > best_val_f1:
                 best_val_f1 = val_f1
                 best_threshold_overall = threshold_this_epoch
@@ -379,7 +378,7 @@ class GraphClassifierNAS:
             else:
                 trigger_times += 1
                 if trigger_times >= self.patience:
-                    print("Early stopping por paciencia alcanzada.")
+                    print("Early stopping: patience reached.")
                     break
 
         return best_val_f1, best_threshold_overall
@@ -387,9 +386,9 @@ class GraphClassifierNAS:
 
     def evaluate_best_threshold_and_f1(self, model, loader):
         """
-        Recorre el loader (validación), obtiene probabilidades,
-        calcula la curva precision-recall, extrae el threshold que maximiza F1.
-        Retorna (best_threshold, f1_al_mejor_threshold).
+        Iterates over the validation loader, collects probabilities,
+        computes the precision-recall curve, and extracts the threshold
+        that maximises F1. Returns (best_threshold, f1_at_best_threshold).
         """
         model.eval()
         all_probs = []
@@ -402,18 +401,17 @@ class GraphClassifierNAS:
                 all_probs.extend(probs)
                 all_labels.extend(data.y.cpu().numpy())
 
-        # Curva precision-recall
+        # Precision-recall curve
         precision, recall, thresholds = precision_recall_curve(all_labels, all_probs)
-        # Evitamos division por cero
+        # Avoid division by zero
         f1_scores = 2 * (precision * recall) / (precision + recall + 1e-8)
 
-        if len(f1_scores) == 0:  # En caso de no poder calcular
+        if len(f1_scores) == 0:
             return 0.5, 0.0
 
         best_idx = np.argmax(f1_scores)
-        # Si best_idx coincide con el último índice (sin threshold), usar 0.5 por defecto
+        # Fall back to 0.5 if best_idx points beyond the thresholds array
         best_threshold = thresholds[best_idx] if best_idx < len(thresholds) else 0.5
         best_f1 = f1_scores[best_idx]
 
         return best_threshold, best_f1
-

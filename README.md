@@ -8,6 +8,9 @@ Predicting whether a tourist will revisit a rural destination is key for sustain
 
 A multi-objective NAS search over the MPNN architecture space finds Pareto-optimal models that maximize classification performance while minimizing computational cost.
 
+
+![GNN Architecture](images/architecture.png)
+
 ## Method
 
 1. **Graph Construction**: Each vehicle visit → directed path graph with one-hot node features + direction + edge travel times.
