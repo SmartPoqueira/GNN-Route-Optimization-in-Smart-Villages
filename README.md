@@ -10,7 +10,7 @@ A multi-objective NAS search over the MPNN architecture space finds Pareto-optim
 
 
 <p align="center">
-  <img src="images/architecture.png" width="750"/>
+  <img src="paper/figures/pipeline.png" width="750"/>
 </p>
 
 *Pipeline and architecture of the ImprovedMPNN framework with multi-objective NAS.*
@@ -38,7 +38,7 @@ Pareto front from 200 NAS trials (best configurations):
 | C | 64 | 1+1+1+1 | ✗ | 0.812 | **9.4** |
 
 <p align="center">
-  <img src="images/pareto_front.png" width="700"/>
+  <img src="paper/figures/pareto_front.png" width="700"/>
 </p>
 
 *Multi-objective NAS-HPO executions. Red stars indicate the Pareto front (maximise F1, minimise training time).*
