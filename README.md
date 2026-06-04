@@ -10,7 +10,7 @@ A multi-objective NAS search over the MPNN architecture space finds Pareto-optim
 
 
 <p align="center">
-  <img src="paper/figures/pipeline.png" width="750"/>
+  <img src="images/pipeline.png" width="750"/>
 </p>
 
 *Pipeline and architecture of the ImprovedMPNN framework with multi-objective NAS.*
@@ -38,7 +38,7 @@ Pareto front from 200 NAS trials (best configurations):
 | C | 64 | 1+1+1+1 | ✗ | 0.812 | **9.4** |
 
 <p align="center">
-  <img src="paper/figures/pareto_front.png" width="700"/>
+  <img src="images/pareto_front.png" width="700"/>
 </p>
 
 *Multi-objective NAS-HPO executions. Red stars indicate the Pareto front (maximise F1, minimise training time).*
@@ -52,14 +52,15 @@ GNN-RouteOpt/
 ├── requirements.txt
 ├── configs/
 │   └── config.yaml
+├── images/
+│   ├── pipeline.png
+│   ├── pareto_front.png
+│   └── all_models_roc.png
 ├── src/
 │   ├── __init__.py
 │   ├── model.py          # ImprovedMPNN_NAS architecture
 │   ├── nas_search.py     # Multi-objective Optuna NAS
 │   └── visualize.py      # Pareto front visualization
-├── paper/
-│   ├── main.tex
-│   └── figures/
 └── scripts/
     └── run_experiment.sh
 ```
@@ -89,4 +90,4 @@ python -m src.nas_search --config configs/config.yaml
 
 ## License
 
-MIT License — see [LICENSE](LICENSE).
+Creative Commons Attribution 4.0 International License (CC BY 4.0) — see [LICENSE](LICENSE).
