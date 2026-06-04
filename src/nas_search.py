@@ -1,3 +1,5 @@
+# nas_search.py
+
 import os
 import ast
 import json
@@ -27,7 +29,7 @@ from sklearn.metrics import (
     precision_recall_curve, roc_curve, auc, f1_score
 )
 
-from improvedMPNN_nas import ImprovedMPNN_NAS
+from src.model import ImprovedMPNN_NAS
 
 class GraphClassifierNAS:
     """
@@ -47,6 +49,10 @@ class GraphClassifierNAS:
         self.set_seed(self.seed)
 
         self.csv_path = self.config['csv_path']
+        if not os.path.exists(self.csv_path):
+            print(f"[WARNING] Database path '{self.csv_path}' not found. Generating synthetic route dataset...")
+            self.generate_synthetic_data()
+
         self.df = pd.read_csv(self.csv_path)
 
         # Undersampling parameters
@@ -56,6 +62,7 @@ class GraphClassifierNAS:
         # Modelling parameters
         self.training_params = self.config['training_params']
 
+        os.makedirs('results', exist_ok=True)
         self.preprocess_labels()
         self.node_mapping = self.create_node_mapping()
         self.num_node_features = len(self.node_mapping) + 1  # +1 for direction
@@ -83,6 +90,38 @@ class GraphClassifierNAS:
         torch.cuda.manual_seed_all(seed)
         torch.backends.cudnn.deterministic = True
         torch.backends.cudnn.benchmark = False
+
+    def generate_synthetic_data(self):
+        """
+        Generates a synthetic route dataset to run the experiments without the real database.
+        """
+        os.makedirs(os.path.dirname(self.csv_path), exist_ok=True)
+        import random
+        random.seed(self.seed)
+        
+        data = []
+        cameras = ['PAM1', 'PAM2', 'BUB', 'CAP']
+        
+        for i in range(1000):
+            route_len = random.randint(2, 5)
+            route = [random.choice(cameras) for _ in range(route_len)]
+            times = [round(random.uniform(5.0, 120.0), 2) for _ in range(route_len - 1)]
+            directions = [random.choice([0, 1]) for _ in range(route_len)]
+            
+            # Simple rule for repeat visitor (label = 1)
+            repeater = 1 if ('CAP' in route or sum(times) < 150.0) and random.random() > 0.3 else 0
+            
+            data.append({
+                'num_plate': f"VEH{i:04d}",
+                'route': str(route),
+                'times': str(times),
+                'directions': str(directions),
+                'repeater': repeater
+            })
+            
+        df_syn = pd.DataFrame(data)
+        df_syn.to_csv(self.csv_path, index=False)
+        print(f"[INFO] Generated 1000 synthetic routes and saved to '{self.csv_path}'.")
 
     def preprocess_labels(self):
         """Preprocesses the label column."""
@@ -152,7 +191,6 @@ class GraphClassifierNAS:
 
     def split_data(self):
         """Splits dataset into train, test, val with 70/15/15 proportions."""
-        # First split: 85% train+val, 15% test
         train_val_data, test_data = train_test_split(
             self.graph_objects,
             test_size=0.15,
@@ -160,8 +198,6 @@ class GraphClassifierNAS:
             stratify=[g.y.item() for g in self.graph_objects]
         )
 
-        # Second split: ~82.35% of train_val for train, 17.65% for val
-        # Results in 70% train and 15% val of the original total
         train_data, val_data = train_test_split(
             train_val_data,
             test_size=0.1765,
@@ -170,7 +206,6 @@ class GraphClassifierNAS:
         )
 
         return train_data, test_data, val_data
-
 
     def undersample_data(self, dataset, ratio):
         """
@@ -192,7 +227,10 @@ class GraphClassifierNAS:
         n_minority = len(minority_data)
         desired_majority = int((ratio[0]/ratio[1]) * n_minority)
         if desired_majority > len(majority_data):
-            raise ValueError("Desired ratio exceeds available majority class samples.")
+            # Scale down the minority class instead to maintain the requested ratio
+            desired_majority = len(majority_data)
+            n_minority = int((ratio[1]/ratio[0]) * desired_majority)
+            minority_data = random.sample(minority_data, n_minority)
         majority_downsampled = random.sample(majority_data, desired_majority)
         balanced_dataset = majority_downsampled + minority_data
         random.shuffle(balanced_dataset)
@@ -218,7 +256,6 @@ class GraphClassifierNAS:
 
         all_trials = []
         for t in study.trials:
-            # Retrieve the threshold stored in user_attrs
             best_threshold_stored = t.user_attrs.get("best_threshold", None)
 
             trial_info = {
@@ -235,7 +272,6 @@ class GraphClassifierNAS:
 
         print("\n=== Pareto Front (best trials) ===")
         for bt in study.best_trials:
-            # Retrieve threshold from best_trial user_attrs
             threshold_bt = bt.user_attrs.get("best_threshold", None)
             print(f" Trial #{bt.number}")
             print(f"   F1 Score: {bt.values[0]:.4f}")
@@ -252,33 +288,35 @@ class GraphClassifierNAS:
         """
         node_mlp_layers = trial.suggest_int('node_mlp_layers', 1, 3)
         edge_mlp_layers = trial.suggest_int('edge_mlp_layers', 1, 3)
-        msg_mlp_layers  = trial.suggest_int('message_mlp_layers', 1, 3)
-        final_mlp_layers= trial.suggest_int('final_mlp_layers', 1, 3)
+        gnn_layers = trial.suggest_int('gnn_layers', 1, 4)
+        msg_mlp_layers = trial.suggest_int('message_mlp_layers', 0, 3)
+        final_mlp_layers = trial.suggest_int('final_mlp_layers', 1, 3)
 
         hidden_dim = trial.suggest_int('hidden_dim', 32, 256, step=32)
         dropout_rate = trial.suggest_float('dropout_rate', 0.0, 0.5)
         use_batchnorm = trial.suggest_categorical('use_batchnorm', [True, False])
-        aggregator = trial.suggest_categorical('aggregator', ['mean','add','max'])
+        aggregator = trial.suggest_categorical('aggregator', ['mean', 'add', 'max'])
         lr = trial.suggest_float('lr', 1e-4, 1e-2, log=True)
 
-        # Additional hyperparameters
-        use_attention = trial.suggest_categorical('use_attention', [True, False])
-        residual_connection = trial.suggest_categorical('residual_connection', [True, False])
+        activation = trial.suggest_categorical('activation', ['ReLU', 'GELU', 'LeakyReLU'])
+        use_residual = trial.suggest_categorical('use_residual', [True, False])
 
         # Undersampling as a hyperparameter
         use_undersampling = trial.suggest_categorical('use_undersampling', [True, False])
 
         model_params = {
+            'model_name': 'E-GAT',
             'hidden_dim': hidden_dim,
             'dropout': dropout_rate,
             'use_batchnorm': use_batchnorm,
             'aggregation': aggregator,
             'node_mlp_layers': node_mlp_layers,
             'edge_mlp_layers': edge_mlp_layers,
+            'gnn_layers': gnn_layers,
             'message_mlp_layers': msg_mlp_layers,
             'final_mlp_layers': final_mlp_layers,
-            'use_attention': use_attention,
-            'residual_connection': residual_connection
+            'use_residual': use_residual,
+            'activation': activation
         }
 
         model = ImprovedMPNN_NAS(
@@ -290,11 +328,9 @@ class GraphClassifierNAS:
         # Apply undersampling if enabled
         if use_undersampling:
             train_dataset = self.undersample_data(self.train_dataset, [70, 30])
-            print("[INFO] Undersampling applied to training set.")
         else:
             train_dataset = self.train_dataset
 
-        # Create DataLoaders with balanced or original dataset
         g = torch.Generator()
         g.manual_seed(self.seed)
         train_loader = DataLoader(
@@ -319,12 +355,9 @@ class GraphClassifierNAS:
         end_time = time.time()
         train_time = end_time - start_time
 
-        # Store threshold as a trial attribute
         trial.set_user_attr("best_threshold", float(best_threshold))
 
         return (best_val_f1, train_time)
-
-
 
     def train_and_evaluate_for_trial(self, model, optimizer, criterion, train_loader, val_loader):
         """
@@ -383,7 +416,6 @@ class GraphClassifierNAS:
 
         return best_val_f1, best_threshold_overall
 
-
     def evaluate_best_threshold_and_f1(self, model, loader):
         """
         Iterates over the validation loader, collects probabilities,
@@ -403,15 +435,91 @@ class GraphClassifierNAS:
 
         # Precision-recall curve
         precision, recall, thresholds = precision_recall_curve(all_labels, all_probs)
-        # Avoid division by zero
         f1_scores = 2 * (precision * recall) / (precision + recall + 1e-8)
 
         if len(f1_scores) == 0:
             return 0.5, 0.0
 
         best_idx = np.argmax(f1_scores)
-        # Fall back to 0.5 if best_idx points beyond the thresholds array
         best_threshold = thresholds[best_idx] if best_idx < len(thresholds) else 0.5
         best_f1 = f1_scores[best_idx]
 
         return best_threshold, best_f1
+
+    def run_all_models_comparison(self):
+        """
+        Trains and evaluates all 10 GNN models on the dataset to print Table V.
+        """
+        models = ['GCN', 'E-GCN', 'GraphSAGE', 'E-GraphSAGE', 'GGNN', 'E-GGNN', 'EdgeConv', 'MPNN', 'GAT', 'E-GAT']
+        results = {}
+
+        model_params = {
+            'hidden_dim': 128,
+            'dropout': 0.3,
+            'use_batchnorm': True,
+            'aggregation': 'mean',
+            'node_mlp_layers': 2,
+            'edge_mlp_layers': 2,
+            'gnn_layers': 2,
+            'message_mlp_layers': 2,
+            'final_mlp_layers': 2,
+            'use_residual': True,
+            'activation': 'ReLU'
+        }
+
+        print("\n=== Training and Evaluating All 10 GNN Models (Table V) ===")
+
+        for m_name in models:
+            print(f"\nTraining Model: {m_name}...")
+            model = ImprovedMPNN_NAS(
+                num_node_features=self.num_node_features,
+                num_edge_features=self.num_edge_features,
+                model_params={**model_params, 'model_name': m_name}
+            ).to(self.device)
+
+            train_loader = DataLoader(self.train_dataset, batch_size=self.training_params['batch_size'], shuffle=True)
+            val_loader = DataLoader(self.validation_dataset, batch_size=self.training_params['batch_size'], shuffle=False)
+
+            criterion = nn.BCEWithLogitsLoss()
+            optimizer = optim.AdamW(model.parameters(), lr=0.001)
+
+            best_f1 = 0.0
+            best_thresh = 0.5
+            # Train for 5 epochs for comparison
+            for epoch in range(5):
+                model.train()
+                for data in train_loader:
+                    data = data.to(self.device)
+                    optimizer.zero_grad()
+                    out = model(data.x, data.edge_index, data.edge_attr, data.batch)
+                    loss = criterion(out.view(-1), data.y)
+                    loss.backward()
+                    optimizer.step()
+
+                thresh, val_f1 = self.evaluate_best_threshold_and_f1(model, val_loader)
+                if val_f1 > best_f1:
+                    best_f1 = val_f1
+                    best_thresh = thresh
+
+            print(f"Model {m_name} - Best Validation F1: {best_f1:.4f} (threshold: {best_thresh:.2f})")
+            results[m_name] = {'F1': best_f1, 'Threshold': best_thresh}
+
+        print("\n=== Model Comparison Summary ===")
+        for m_name, res in results.items():
+            print(f"{m_name:<15}: F1={res['F1']:.4f}")
+
+def main():
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--config', type=str, required=True)
+    parser.add_argument('--compare', action='store_true', help='Compare all 10 models instead of running NAS')
+    args = parser.parse_args()
+
+    nas = GraphClassifierNAS(args.config)
+    if args.compare:
+        nas.run_all_models_comparison()
+    else:
+        nas.run_multiobjective_experiment()
+
+if __name__ == "__main__":
+    main()
