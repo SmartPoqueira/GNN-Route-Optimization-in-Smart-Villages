@@ -65,11 +65,12 @@ python -m src.nas_search --config configs/config.yaml
 ## Citation
 
 ```bibtex
-@article{duranlopez2025gnnroute,
-  title={Graph Neural Network Route Optimization for Return Visit Prediction in Smart Villages},
-  author={Dur{\'a}n-L{\'o}pez, Alberto and Bola{\~n}os-Mart{\'i}nez, Daniel and Berm{\'u}dez-Edo, Mar{\'i}a},
+@article{duran2025route,
+  title={Route Optimization in Smart Villages: A Graph Neural Network Approach},
+  author={Dur{\'a}n-L{\'o}pez, Alberto and Bola{\~n}os-Martinez, Daniel and Almahmoud, Zaid and Pravin, Chandresh and De, Suparna and Bermudez-Edo, Maria},
   journal={IEEE Internet of Things Journal},
-  year={2025}
+  year={2025},
+  publisher={IEEE}
 }
 ```
 
