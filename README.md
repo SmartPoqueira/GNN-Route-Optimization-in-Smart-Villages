@@ -27,7 +27,7 @@ $$\alpha_{uv} = \frac{\exp\left(\text{LeakyReLU}\left(\mathbf{a}^T [W_n h_u^{(l-
 
 The node embeddings $h_v^{(l)}$ and edge embeddings $x_{e_{uv}}^{(l)}$ at layer $l$ are iteratively updated as follows:
 
-$$h_v^{(l)} = \text{Activation}\left(W_{\text{node}} \left[ h_v^{(l-1)} \mathbin{\Vert} \operatorname{AGG}_{u \in \mathcal{N}(v)} \left( \alpha_{uv} \cdot \left( W_u h_u^{(l-1)} + W_e x_{e_{uv}}^{(l-1)} \right) \right) \right]\right)$$
+$$h_v^{(l)} = \text{Activation}\left(W_{\text{node}} \left[ h_v^{(l-1)} \mathbin{\Vert} \text{AGG}_{u \in \mathcal{N}(v)} \left( \alpha_{uv} \cdot \left( W_u h_u^{(l-1)} + W_e x_{e_{uv}}^{(l-1)} \right) \right) \right]\right)$$
 
 $$x_{e_{uv}}^{(l)} = \text{Activation}\left(W_{\text{edge}} \left[ h_u^{(l-1)} \mathbin{\Vert} h_v^{(l-1)} \mathbin{\Vert} x_{e_{uv}}^{(l-1)} \right]\right)$$
 
