@@ -1,0 +1,12 @@
+csv_path: 'db/12months.csv'
+undersampling: False
+undersampling_ratio: [70, 30]
+seed: 1868
+output_json: 'nas_results.json'
+
+training_params:
+  epochs: 30
+  batch_size: 64
+  patience: 10
+  n_trials_for_nas: 200
+
