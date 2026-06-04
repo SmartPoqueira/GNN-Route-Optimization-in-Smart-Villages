@@ -2,9 +2,9 @@
 
 import torch
 from torch import nn
-from torch.nn import Sequential as Seq, Linear, ReLU, Dropout, BatchNorm1d, LayerNorm
-from torch_geometric.nn import MessagePassing, global_mean_pool, GATConv
-from torch_geometric.utils import add_self_loops, remove_self_loops
+from torch.nn import Sequential as Seq, Linear, ReLU, Dropout, BatchNorm1d
+from torch_geometric.nn import MessagePassing, global_mean_pool
+
 
 def build_mlp(
     input_dim: int,
