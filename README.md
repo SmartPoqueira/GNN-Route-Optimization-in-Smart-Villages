@@ -78,6 +78,8 @@ python -m src.nas_search --config configs/config.yaml
 
 ## Citation
 
+If you use this code in your research, please cite:
+
 ```bibtex
 @article{duran2025route,
   title={Route Optimization in Smart Villages: A Graph Neural Network Approach},
